@@ -6,13 +6,58 @@ import re
 import requests
 from dotenv import load_dotenv
 
+try:
+    import streamlit as st
+except ImportError:
+    st = None
+
+
 load_dotenv()
 
-API_KEY = os.getenv("AVIATIONSTACK_API_KEY")
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+def get_api_key() -> str | None:
+    """
+    Load the AviationStack API key.
+
+    Streamlit Cloud:
+        Reads from st.secrets.
+
+    Local development:
+        Falls back to the .env / environment variable.
+    """
+
+    # Streamlit Cloud
+    if st is not None:
+        try:
+            secrets = st.secrets
+
+            if "AVIATIONSTACK_API_KEY" in secrets:
+                value = secrets["AVIATIONSTACK_API_KEY"]
+
+                if value:
+                    return str(value)
+
+        except Exception:
+            # Local machine may not have Streamlit secrets configured.
+            pass
+
+    # Local .env / environment
+    return os.getenv("AVIATIONSTACK_API_KEY")
+
+
+API_KEY = get_api_key()
+
 API_URL = "https://api.aviationstack.com/v1/flights"
 
 
-# Origin cities / airports.
+# ---------------------------------------------------------------------------
+# Origin cities / airports
+# ---------------------------------------------------------------------------
+
 ORIGIN_CODES = {
     "mumbai": ["BOM"],
     "bombay": ["BOM"],
@@ -30,8 +75,10 @@ ORIGIN_CODES = {
 }
 
 
-# Destination cities / countries.
-# Multiple airports are supported for destinations such as Tokyo.
+# ---------------------------------------------------------------------------
+# Destination cities / countries
+# ---------------------------------------------------------------------------
+
 DESTINATION_CODES = {
     "japan": ["NRT", "HND"],
     "tokyo": ["NRT", "HND"],
@@ -54,14 +101,24 @@ DESTINATION_CODES = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Location helpers
+# ---------------------------------------------------------------------------
+
 def _find_location(text: str, locations: dict):
     """Find a location name mentioned in the user's query."""
 
     text = text.lower()
 
-    # Check longer names first.
-    for location in sorted(locations.keys(), key=len, reverse=True):
-        if re.search(rf"\b{re.escape(location)}\b", text):
+    for location in sorted(
+        locations.keys(),
+        key=len,
+        reverse=True,
+    ):
+        if re.search(
+            rf"\b{re.escape(location)}\b",
+            text,
+        ):
             return location, locations[location]
 
     return None, None
@@ -90,6 +147,7 @@ def _extract_route(query: str):
     # ---------------------------------------------------------
     # 1. Look for "from Mumbai"
     # ---------------------------------------------------------
+
     from_match = re.search(
         r"\bfrom\s+([a-zA-Z][a-zA-Z\s]*?)(?=\s+(?:to|under|for|with|on|budget|trip|vacation)\b|$)",
         query_lower,
@@ -98,7 +156,6 @@ def _extract_route(query: str):
     if from_match:
         origin_text = from_match.group(1).strip()
 
-        # Try exact location matching inside the extracted text.
         for location in sorted(
             ORIGIN_CODES.keys(),
             key=len,
@@ -112,6 +169,7 @@ def _extract_route(query: str):
     # ---------------------------------------------------------
     # 2. Look for explicit "Mumbai to Tokyo"
     # ---------------------------------------------------------
+
     to_match = re.search(
         r"\bfrom\s+([a-zA-Z][a-zA-Z\s]*?)\s+to\s+([a-zA-Z][a-zA-Z\s]*?)(?=\s+(?:under|for|with|on|budget|trip|vacation)\b|$)",
         query_lower,
@@ -145,6 +203,7 @@ def _extract_route(query: str):
     # ---------------------------------------------------------
     # 3. Detect destination anywhere in the query.
     # ---------------------------------------------------------
+
     if not destination_codes:
         destination_name, destination_codes = _find_location(
             query_lower,
@@ -154,6 +213,7 @@ def _extract_route(query: str):
     # ---------------------------------------------------------
     # 4. Detect origin anywhere in the query.
     # ---------------------------------------------------------
+
     if not origin_codes:
         origin_name, origin_codes = _find_location(
             query_lower,
@@ -167,6 +227,10 @@ def _extract_route(query: str):
         destination_codes,
     )
 
+
+# ---------------------------------------------------------------------------
+# AviationStack API helper
+# ---------------------------------------------------------------------------
 
 def _search_api(params: dict):
     """Make an AviationStack request."""
@@ -187,13 +251,17 @@ def _search_api(params: dict):
     return data.get("data", [])
 
 
+# ---------------------------------------------------------------------------
+# Main Flight Search
+# ---------------------------------------------------------------------------
+
 def search_flights(query: str) -> str:
     """Search AviationStack using the route extracted from the request."""
 
     if not API_KEY:
         return (
             "Flight search unavailable: "
-            "set AVIATIONSTACK_API_KEY in .env."
+            "set AVIATIONSTACK_API_KEY in .env or Streamlit Secrets."
         )
 
     (
@@ -206,6 +274,7 @@ def search_flights(query: str) -> str:
     # ---------------------------------------------------------
     # We need at least a destination to perform a useful search.
     # ---------------------------------------------------------
+
     if not destination_codes:
 
         return (
@@ -220,12 +289,8 @@ def search_flights(query: str) -> str:
 
     # ---------------------------------------------------------
     # Search each destination airport.
-    #
-    # Example:
-    # Japan = NRT + HND
-    #
-    # This avoids relying on a city-level IATA code.
     # ---------------------------------------------------------
+
     for destination_code in destination_codes:
 
         params = {
@@ -234,7 +299,6 @@ def search_flights(query: str) -> str:
             "limit": 10,
         }
 
-        # Add departure airport if known.
         if origin_codes:
             params["dep_iata"] = origin_codes[0]
 
@@ -266,8 +330,8 @@ def search_flights(query: str) -> str:
     # ---------------------------------------------------------
     # Remove duplicate flights.
     # ---------------------------------------------------------
-    unique_flights = []
 
+    unique_flights = []
     seen = set()
 
     for flight in all_flights:
@@ -279,7 +343,6 @@ def search_flights(query: str) -> str:
         )
 
         if flight_id not in seen:
-
             seen.add(flight_id)
             unique_flights.append(flight)
 
@@ -288,19 +351,18 @@ def search_flights(query: str) -> str:
     # ---------------------------------------------------------
     # No results.
     # ---------------------------------------------------------
+
     if not unique_flights:
 
         route_text = ""
 
         if origin_name and destination_name:
-
             route_text = (
                 f"{origin_name.title()} → "
                 f"{destination_name.title()}"
             )
 
         elif destination_name:
-
             route_text = destination_name.title()
 
         return (
@@ -313,6 +375,7 @@ def search_flights(query: str) -> str:
     # ---------------------------------------------------------
     # Format results.
     # ---------------------------------------------------------
+
     output = []
 
     if origin_name and destination_name:

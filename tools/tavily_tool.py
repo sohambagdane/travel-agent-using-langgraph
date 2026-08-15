@@ -7,9 +7,50 @@ from typing import List
 from dotenv import load_dotenv
 from tavily import TavilyClient
 
+try:
+    import streamlit as st
+except ImportError:
+    st = None
+
+
 load_dotenv()
 
-API_KEY = os.getenv("TAVILY_API_KEY")
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+def get_api_key() -> str | None:
+    """
+    Load the Tavily API key.
+
+    Streamlit Cloud:
+        Reads from st.secrets.
+
+    Local development:
+        Falls back to the .env / environment variable.
+    """
+
+    # Streamlit Cloud
+    if st is not None:
+        try:
+            secrets = st.secrets
+
+            if "TAVILY_API_KEY" in secrets:
+                value = secrets["TAVILY_API_KEY"]
+
+                if value:
+                    return str(value)
+
+        except Exception:
+            # Local machine may not have Streamlit secrets configured.
+            pass
+
+    # Local .env / environment
+    return os.getenv("TAVILY_API_KEY")
+
+
+API_KEY = get_api_key()
 
 client = (
     TavilyClient(api_key=API_KEY)
@@ -18,7 +59,10 @@ client = (
 )
 
 
-# Common destinations used in travel requests.
+# ---------------------------------------------------------------------------
+# Common destinations used in travel requests
+# ---------------------------------------------------------------------------
+
 DESTINATIONS = [
     "paris",
     "tokyo",
@@ -40,6 +84,10 @@ DESTINATIONS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Destination Extraction
+# ---------------------------------------------------------------------------
+
 def _extract_destination(query: str) -> str:
     """Extract the destination from a travel request."""
 
@@ -60,13 +108,24 @@ def _extract_destination(query: str) -> str:
     return ""
 
 
-def _clean_text(text: str, max_length: int = 500) -> str:
+# ---------------------------------------------------------------------------
+# Text Cleanup
+# ---------------------------------------------------------------------------
+
+def _clean_text(
+    text: str,
+    max_length: int = 500,
+) -> str:
     """Clean and shorten Tavily result text."""
 
     if not text:
         return ""
 
-    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(
+        r"\s+",
+        " ",
+        text,
+    ).strip()
 
     if len(text) > max_length:
         text = (
@@ -78,7 +137,14 @@ def _clean_text(text: str, max_length: int = 500) -> str:
     return text
 
 
-def _search(query: str, max_results: int = 5) -> List[dict]:
+# ---------------------------------------------------------------------------
+# Tavily Search Helper
+# ---------------------------------------------------------------------------
+
+def _search(
+    query: str,
+    max_results: int = 5,
+) -> List[dict]:
     """Execute a Tavily search safely."""
 
     if client is None:
@@ -92,11 +158,18 @@ def _search(query: str, max_results: int = 5) -> List[dict]:
             include_answer=False,
         )
 
-        return response.get("results", [])
+        return response.get(
+            "results",
+            [],
+        )
 
     except Exception:
         return []
 
+
+# ---------------------------------------------------------------------------
+# Main Hotel Research Function
+# ---------------------------------------------------------------------------
 
 def tavily_search(query: str) -> str:
     """
@@ -109,13 +182,12 @@ def tavily_search(query: str) -> str:
     if client is None:
         return (
             "Hotel research unavailable: "
-            "set TAVILY_API_KEY in .env."
+            "set TAVILY_API_KEY in .env or Streamlit Secrets."
         )
 
     destination = _extract_destination(query)
 
     if not destination:
-
         return (
             "Hotel research could not determine the "
             "destination from the request.\n\n"
@@ -139,7 +211,6 @@ def tavily_search(query: str) -> str:
     )
 
     if not results:
-
         return (
             f"No hotel research results were returned "
             f"for {destination.title()}."
@@ -197,7 +268,6 @@ def tavily_search(query: str) -> str:
         )
 
     if not formatted_results:
-
         return (
             f"Tavily returned results for "
             f"{destination.title()}, but no useful "
@@ -207,5 +277,7 @@ def tavily_search(query: str) -> str:
     return (
         f"Hotel research for "
         f"**{destination.title()}**\n\n"
-        + "\n\n".join(formatted_results[:5])
+        + "\n\n".join(
+            formatted_results[:5]
+        )
     )

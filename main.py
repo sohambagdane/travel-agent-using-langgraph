@@ -23,13 +23,51 @@ from tools.tavily_tool import tavily_search
 
 
 # ---------------------------------------------------------------------------
+# Optional Streamlit support
+# ---------------------------------------------------------------------------
+
+try:
+    import streamlit as st
+except ImportError:
+    st = None
+
+
+# ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+def get_config_value(key: str):
+    """
+    Load configuration from Streamlit Cloud secrets when available.
+
+    Falls back to local environment variables / .env when Streamlit
+    secrets are unavailable.
+    """
+
+    # Streamlit Cloud
+    if st is not None:
+        try:
+            secrets = st.secrets
+
+            if key in secrets:
+                value = secrets[key]
+
+                if value:
+                    return str(value)
+
+        except Exception:
+            # Local environment may not have .streamlit/secrets.toml.
+            pass
+
+    # Local .env / system environment
+    return os.getenv(key)
+
+
+DATABASE_URL = get_config_value("DATABASE_URL")
+GROQ_API_KEY = get_config_value("GROQ_API_KEY")
 
 
 # ---------------------------------------------------------------------------
@@ -313,6 +351,7 @@ def create_checkpointer():
 
     if not DATABASE_URL:
         print("DATABASE_URL not configured.")
+
         return (
             InMemorySaver(),
             "In-memory (set DATABASE_URL for persistence)",
