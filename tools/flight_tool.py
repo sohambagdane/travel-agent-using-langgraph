@@ -2,6 +2,7 @@
 
 import os
 import re
+from datetime import date, timedelta
 
 import requests
 from dotenv import load_dotenv
@@ -124,13 +125,17 @@ def _find_location(text: str, locations: dict):
     return None, None
 
 
+# ---------------------------------------------------------------------------
+# Route extraction
+# ---------------------------------------------------------------------------
+
 def _extract_route(query: str):
     """
     Extract origin and destination from natural-language travel requests.
 
     Examples:
 
-        7-day Japan trip from Mumbai under ₹2L
+        5-day Japan trip from Mumbai under ₹2L
         Mumbai to Tokyo trip
         5-day Paris trip from Delhi
         Dubai weekend trip from Mumbai
@@ -149,7 +154,7 @@ def _extract_route(query: str):
     # ---------------------------------------------------------
 
     from_match = re.search(
-        r"\bfrom\s+([a-zA-Z][a-zA-Z\s]*?)(?=\s+(?:to|under|for|with|on|budget|trip|vacation)\b|$)",
+        r"\bfrom\s+([a-zA-Z][a-zA-Z\s]*?)(?=\s+(?:to|under|for|with|on|budget|trip|vacation|departing|leaving)\b|$)",
         query_lower,
     )
 
@@ -171,7 +176,7 @@ def _extract_route(query: str):
     # ---------------------------------------------------------
 
     to_match = re.search(
-        r"\bfrom\s+([a-zA-Z][a-zA-Z\s]*?)\s+to\s+([a-zA-Z][a-zA-Z\s]*?)(?=\s+(?:under|for|with|on|budget|trip|vacation)\b|$)",
+        r"\bfrom\s+([a-zA-Z][a-zA-Z\s]*?)\s+to\s+([a-zA-Z][a-zA-Z\s]*?)(?=\s+(?:under|for|with|on|budget|trip|vacation|departing|leaving)\b|$)",
         query_lower,
     )
 
@@ -229,6 +234,81 @@ def _extract_route(query: str):
 
 
 # ---------------------------------------------------------------------------
+# Flight date extraction
+# ---------------------------------------------------------------------------
+
+def _extract_flight_date(query: str) -> str | None:
+    """
+    Extract a requested departure date.
+
+    Supports natural language such as:
+
+        tomorrow
+        today
+        departing tomorrow
+        leaving tomorrow
+        flights tomorrow
+        on 2026-08-16
+
+    Returns:
+        YYYY-MM-DD string or None if no specific date was requested.
+    """
+
+    query_lower = query.lower()
+
+    today = date.today()
+
+    # ---------------------------------------------------------
+    # Tomorrow
+    # ---------------------------------------------------------
+
+    tomorrow_patterns = [
+        r"\btomorrow\b",
+        r"\bdepart(?:ing)?\s+tomorrow\b",
+        r"\bleav(?:e|ing)\s+tomorrow\b",
+        r"\bflight(?:s)?\s+tomorrow\b",
+    ]
+
+    if any(
+        re.search(pattern, query_lower)
+        for pattern in tomorrow_patterns
+    ):
+        return (today + timedelta(days=1)).isoformat()
+
+    # ---------------------------------------------------------
+    # Today
+    # ---------------------------------------------------------
+
+    if re.search(
+        r"\btoday\b",
+        query_lower,
+    ):
+        return today.isoformat()
+
+    # ---------------------------------------------------------
+    # Explicit YYYY-MM-DD date
+    # ---------------------------------------------------------
+
+    explicit_match = re.search(
+        r"\b(20\d{2}-\d{2}-\d{2})\b",
+        query_lower,
+    )
+
+    if explicit_match:
+        try:
+            requested_date = date.fromisoformat(
+                explicit_match.group(1)
+            )
+
+            return requested_date.isoformat()
+
+        except ValueError:
+            pass
+
+    return None
+
+
+# ---------------------------------------------------------------------------
 # AviationStack API helper
 # ---------------------------------------------------------------------------
 
@@ -248,7 +328,10 @@ def _search_api(params: dict):
     if data.get("error"):
         return []
 
-    return data.get("data", [])
+    return data.get(
+        "data",
+        [],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -256,7 +339,10 @@ def _search_api(params: dict):
 # ---------------------------------------------------------------------------
 
 def search_flights(query: str) -> str:
-    """Search AviationStack using the route extracted from the request."""
+    """
+    Search AviationStack using the route and optional departure date
+    extracted from the request.
+    """
 
     if not API_KEY:
         return (
@@ -285,6 +371,12 @@ def search_flights(query: str) -> str:
             "Paris, Dubai, or Singapore."
         )
 
+    # ---------------------------------------------------------
+    # Extract requested flight date.
+    # ---------------------------------------------------------
+
+    flight_date = _extract_flight_date(query)
+
     all_flights = []
 
     # ---------------------------------------------------------
@@ -302,8 +394,15 @@ def search_flights(query: str) -> str:
         if origin_codes:
             params["dep_iata"] = origin_codes[0]
 
+        # IMPORTANT:
+        # If the user explicitly asks for tomorrow/today/a date,
+        # restrict AviationStack to that exact departure date.
+        if flight_date:
+            params["flight_date"] = flight_date
+
         try:
             flights = _search_api(params)
+
             all_flights.extend(flights)
 
         except requests.HTTPError as exc:
@@ -342,9 +441,48 @@ def search_flights(query: str) -> str:
             or str(flight)
         )
 
-        if flight_id not in seen:
-            seen.add(flight_id)
+        # Include departure date in duplicate detection.
+        departure = flight.get(
+            "departure",
+            {},
+        ) or {}
+
+        unique_id = (
+            flight_id,
+            departure.get("scheduled"),
+        )
+
+        if unique_id not in seen:
+            seen.add(unique_id)
             unique_flights.append(flight)
+
+    # ---------------------------------------------------------
+    # IMPORTANT:
+    # If a specific date was requested, make absolutely sure
+    # we don't display flights from another date.
+    # ---------------------------------------------------------
+
+    if flight_date:
+
+        filtered_flights = []
+
+        for flight in unique_flights:
+
+            departure = flight.get(
+                "departure",
+                {},
+            ) or {}
+
+            scheduled = (
+                departure.get("scheduled")
+                or departure.get("estimated")
+                or ""
+            )
+
+            if scheduled.startswith(flight_date):
+                filtered_flights.append(flight)
+
+        unique_flights = filtered_flights
 
     unique_flights = unique_flights[:10]
 
@@ -364,6 +502,14 @@ def search_flights(query: str) -> str:
 
         elif destination_name:
             route_text = destination_name.title()
+
+        if flight_date:
+            return (
+                f"No flight records were returned for "
+                f"{route_text} on {flight_date}.\n\n"
+                "AviationStack may not have flight data for "
+                "that future date or route."
+            )
 
         return (
             f"No live flight records were returned for "
@@ -393,18 +539,37 @@ def search_flights(query: str) -> str:
             f"{destination_name.title()}"
         )
 
+    if flight_date:
+        output.append(
+            f"Departure date searched: {flight_date}"
+        )
+
     output.append("")
 
     for flight in unique_flights:
 
         airline = (
-            flight.get("airline", {}).get("name")
+            flight.get(
+                "airline",
+                {},
+            ).get("name")
             or "Unknown airline"
         )
 
-        departure = flight.get("departure", {}) or {}
-        arrival = flight.get("arrival", {}) or {}
-        flight_info = flight.get("flight", {}) or {}
+        departure = flight.get(
+            "departure",
+            {},
+        ) or {}
+
+        arrival = flight.get(
+            "arrival",
+            {},
+        ) or {}
+
+        flight_info = flight.get(
+            "flight",
+            {},
+        ) or {}
 
         flight_number = (
             flight_info.get("iata")
