@@ -1,886 +1,572 @@
-**# ✈️ AI Travel Planner — Multi-Agent LangGraph System**
+# Tool-Calling AI Agent
 
+A Python-based AI agent that can understand user requests, decide which tool is required, execute the tool, and use the result to generate a final response.
 
+This project demonstrates the basic architecture of a **tool-calling AI agent**, including LLM interaction, tool selection, iterative execution, error handling, and execution trace logging.
 
-**An AI-powered multi-agent travel planning application built with \*\*LangGraph\*\*, \*\*Groq / LLaMA 3.3 70B\*\*, \*\*Tavily\*\*, \*\*AviationStack\*\*, \*\*PostgreSQL\*\*, and \*\*Streamlit\*\*.**
+---
 
+## 🚀 Features
 
+* LLM-powered agent for understanding natural-language requests
+* Automatic tool selection based on the user's query
+* Multiple custom tools
+* Iterative tool-calling loop
+* Calculator tool for mathematical operations
+* Country information tool using the Countries.dev API
+* Secure file-reading tool with workspace restrictions
+* Tool execution error handling
+* Unknown-tool handling
+* Invalid LLM response handling
+* JSON trace logging for successful agent executions
+* Modular project structure
+* Environment-variable based API key configuration
 
-**The application breaks travel planning into specialized agents that research flights, investigate accommodation options, generate an itinerary, and synthesize the collected information into a final travel plan.**
+---
 
+## 🧠 How the Agent Works
 
+The agent follows a simple reasoning and tool-execution workflow:
 
-**---**
+```text
+User Query
+    ↓
+LLM
+    ↓
+Decide whether a tool is required
+    ↓
+Select Tool + Arguments
+    ↓
+Execute Tool
+    ↓
+Return Tool Result to LLM
+    ↓
+LLM decides next action
+    ↓
+Final Answer
+```
 
+The agent can perform multiple tool calls when required instead of being limited to a single tool execution.
 
+---
 
-**## 🚀 Features**
+## 🛠️ Available Tools
 
+### 1. Calculator
 
+The calculator tool performs mathematical calculations.
+
+Example queries:
 
-**- 🤖 Multi-agent workflow orchestrated with \*\*LangGraph\*\***
+```text
+Calculate 125 * 48
+```
 
-**- ✈️ Flight research using \*\*AviationStack\*\***
+```text
+What is (25 + 15) / 5?
+```
 
-**- 🔎 Web research using \*\*Tavily\*\***
+The agent identifies that the calculator tool is required, executes it, and uses the result in the final response.
 
-**- 🧠 AI-powered itinerary generation using \*\*Groq / LLaMA 3.3 70B\*\***
+---
 
-**- 🧠 AI-powered final response synthesis**
+### 2. Country Information
 
-**- 🐘 PostgreSQL-backed LangGraph checkpointing**
+The country API tool retrieves country information using the **Countries.dev API**.
 
-**- 💾 Persistent conversation/workflow state**
+Example queries:
 
-**- 📊 Streamlit web interface**
+```text
+Tell me about India.
+```
 
-**- ⚡ Live agent pipeline progress in the UI**
+```text
+What is the capital of Japan?
+```
 
-**- 📄 Automatically generated Markdown travel plans**
+```text
+Give me information about Norway.
+```
 
-**- 🔄 In-memory fallback when PostgreSQL is unavailable**
+The tool can retrieve information such as:
 
-**- 🔐 API credentials loaded through environment variables**
+* Country name
+* Capital
+* Region
+* Population
+* Currency
+* Languages
+* Other available country information
 
-**- 🧩 Modular tool-based architecture**
+---
 
+### 3. Read File
 
+The `read_file` tool allows the agent to read text files from the project's workspace directory.
 
-**---**
+Example:
 
+```text
+Read the contents of sample.txt
+```
 
+For security, file access is restricted to the configured workspace directory.
 
-**## 🏗️ Architecture**
+This prevents path traversal attempts from accessing arbitrary files outside the allowed workspace.
 
+---
 
+## 📁 Project Structure
 
-**The application follows a sequential multi-agent workflow:**
+```text
+tool-calling-ai-agent/
+│
+├── agent.py
+├── llm.py
+├── config.py
+├── prompts.py
+├── requirements.txt
+├── README.md
+│
+├── tools/
+│   ├── __init__.py
+│   ├── calculator.py
+│   ├── country_api.py
+│   └── read_file.py
+│
+├── workspace/
+│   └── sample.txt
+│
+└── traces/
+    └── ...
+```
 
+### File Description
 
+| File / Directory       | Purpose                                         |
+| ---------------------- | ----------------------------------------------- |
+| `agent.py`             | Main agent loop and tool orchestration          |
+| `llm.py`               | LLM configuration and communication             |
+| `config.py`            | Project configuration and environment variables |
+| `prompts.py`           | System prompts and tool-calling instructions    |
+| `requirements.txt`     | Python dependencies                             |
+| `tools/calculator.py`  | Calculator tool                                 |
+| `tools/country_api.py` | Country information API tool                    |
+| `tools/read_file.py`   | Secure file-reading tool                        |
+| `workspace/`           | Allowed directory for files used by the agent   |
+| `traces/`              | Stores successful agent execution traces        |
+| `README.md`            | Project documentation                           |
 
-**```text**
+---
 
-&#x20;                        **USER REQUEST**
+## ⚙️ Requirements
 
-&#x20;                             **│**
+Make sure you have:
 
-&#x20;                             **▼**
+* Python 3.10 or later
+* pip
+* Internet connection
+* An API key for the configured LLM provider
 
-&#x20;                    **┌─────────────────┐**
+---
 
-&#x20;                    **│  Flight Agent   │**
+## 🔧 Installation
 
-&#x20;                    **└────────┬────────┘**
+### 1. Clone the repository
 
-&#x20;                             **│**
+```bash
+git clone https://github.com/sohambagdane/tool-calling-ai-agent.git
+```
 
-&#x20;                             **▼**
+### 2. Navigate to the project
 
-&#x20;                      **AviationStack**
+```bash
+cd tool-calling-ai-agent
+```
 
-&#x20;                             **│**
+### 3. Create a virtual environment
 
-&#x20;                             **▼**
+Windows:
 
-&#x20;                    **┌─────────────────┐**
+```bash
+python -m venv venv
+```
 
-&#x20;                    **│   Hotel Agent   │**
+Activate it:
 
-&#x20;                    **└────────┬────────┘**
+```bash
+venv\Scripts\activate
+```
 
-&#x20;                             **│**
+For macOS/Linux:
 
-&#x20;                             **▼**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
 
-&#x20;                          **Tavily**
+---
 
-&#x20;                             **│**
+## 📦 Install Dependencies
 
-&#x20;                             **▼**
+Install all required packages using:
 
-&#x20;                  **┌─────────────────────┐**
+```bash
+pip install -r requirements.txt
+```
 
-&#x20;                  **│  Itinerary Agent    │**
+---
 
-&#x20;                  **└──────────┬──────────┘**
+## 🔐 Environment Variables
 
-&#x20;                             **│**
+Create a `.env` file in the root directory.
 
-&#x20;                             **▼**
+Example:
 
-&#x20;                      **Groq / LLaMA**
+```env
+GEMINI_API_KEY=your_api_key_here
+```
 
-&#x20;                             **│**
+Replace:
 
-&#x20;                             **▼**
+```text
+your_api_key_here
+```
 
-&#x20;                  **┌─────────────────────┐**
+with your actual API key.
 
-&#x20;                  **│    Final Agent      │**
+### Important
 
-&#x20;                  **└──────────┬──────────┘**
+Do not commit your `.env` file or expose your API key publicly.
 
-&#x20;                             **│**
+Add `.env` to `.gitignore`:
 
-&#x20;                             **▼**
+```text
+.env
+venv/
+__pycache__/
+*.pyc
+```
 
-&#x20;                      **Groq / LLaMA**
+---
 
-&#x20;                             **│**
+## ▶️ Running the Agent
 
-&#x20;                             **▼**
+Run the main agent using:
 
-&#x20;                 **┌──────────────────────┐**
+```bash
+python agent.py
+```
 
-&#x20;                 **│    Final Travel Plan │**
+The agent will accept a user query and determine whether one or more tools are required.
 
-&#x20;                 **└──────────┬───────────┘**
+---
 
-&#x20;                            **│**
+## 💡 Example Queries
 
-&#x20;                            **▼**
+### Calculator
 
-&#x20;                   **PostgreSQL Checkpoint**
+```text
+Calculate 125 * 48
+```
 
-&#x20;                            **│**
+Expected behavior:
 
-&#x20;                            **▼**
+```text
+The agent selects the calculator tool,
+executes the calculation,
+and returns the result.
+```
 
-&#x20;                    **Markdown Output**
+---
 
-**```**
+### Country API
 
+```text
+What is the capital of India?
+```
 
+Expected behavior:
 
-**### Agent Responsibilities**
+```text
+The agent selects the country_api tool,
+retrieves the country information,
+and generates the final answer.
+```
 
+---
 
+### File Reading
 
-**| Agent | Responsibility | Technology |**
+Create a file:
 
-**|---|---|---|**
+```text
+workspace/sample.txt
+```
 
-**| ✈️ Flight Agent | Retrieves flight information | AviationStack |**
+with some text inside it.
 
-**| 🏨 Hotel Agent | Researches hotels and accommodation | Tavily |**
+Then ask:
 
-**| 🗺️ Itinerary Agent | Creates a day-by-day itinerary | Groq / LLaMA 3.3 70B |**
+```text
+Read sample.txt
+```
 
-**| 🧠 Final Agent | Synthesizes research and itinerary | Groq / LLaMA 3.3 70B |**
+The agent will use the `read_file` tool to retrieve the contents.
 
+---
 
+## 🔄 Iterative Tool Calling
 
-**---**
+One of the important features of this project is that the agent is not restricted to a single tool call.
 
+The agent can follow an iterative process:
 
+```text
+Iteration 1
+    ↓
+LLM selects a tool
+    ↓
+Tool executes
+    ↓
+Tool result returned to LLM
+    ↓
+Iteration 2
+    ↓
+LLM decides whether another tool is required
+    ↓
+...
+    ↓
+Final response
+```
 
-**## 🔄 Workflow**
+A maximum iteration limit is used to prevent the agent from running indefinitely.
 
+---
 
+## 🧩 Error Handling
 
-**When a user submits a travel request:**
+The agent includes handling for several failure scenarios.
 
+### Unknown Tool
 
+If the LLM requests a tool that does not exist, the agent returns an appropriate error instead of crashing.
 
-**1. The \*\*Flight Agent\*\* receives the request and retrieves flight information.**
+### Tool Execution Error
 
-**2. The \*\*Hotel Agent\*\* researches accommodation and destination information through Tavily.**
+If a tool fails during execution, the error is captured and returned to the agent.
 
-**3. The \*\*Itinerary Agent\*\* combines the user request, flight research, and hotel research to create an itinerary.**
+### Invalid LLM Response
 
-**4. The \*\*Final Agent\*\* synthesizes the collected information into a concise final travel plan.**
+If the LLM returns an unexpected or invalid response format, the agent handles it gracefully.
 
-**5. \*\*LangGraph\*\* manages the state and execution flow between agents.**
+### Maximum Iterations
 
-**6. \*\*PostgreSQL\*\* stores LangGraph checkpoint/state information when configured.**
+The agent stops after reaching the configured maximum number of iterations.
 
-**7. The generated travel plan can be saved as a Markdown file.**
+This prevents infinite tool-calling loops.
 
+---
 
+## 📊 Execution Traces
 
-**---**
+Successful agent executions can be stored as JSON trace files inside:
 
+```text
+traces/
+```
 
+These traces can be used to understand how the agent processed a request.
 
-**## 🧠 Why LangGraph?**
+A trace can contain information such as:
 
+```text
+User query
+↓
+LLM decision
+↓
+Selected tool
+↓
+Tool arguments
+↓
+Tool result
+↓
+Next LLM decision
+↓
+Final response
+```
 
+This makes the project easier to debug, test, and evaluate.
 
-**LangGraph is used to model the travel planner as a structured stateful workflow.**
+---
 
+## 🔒 Security Considerations
 
+The `read_file` tool is designed to prevent unauthorized file access.
 
-**The application maintains a shared state containing:**
+Instead of allowing arbitrary filesystem paths, file access is restricted to the configured workspace directory.
 
+For example, requests attempting to access files outside the workspace should not be permitted.
 
+This provides basic protection against:
 
-**```text**
+* Path traversal
+* Unauthorized filesystem access
+* Reading sensitive files outside the project workspace
 
-**user\_query**
+API keys are also stored through environment variables rather than directly inside source code.
 
-**flight\_results**
+---
 
-**hotel\_results**
+## 🏗️ Architecture
 
-**itinerary**
+The project is divided into separate components.
 
-**messages**
+```text
+                ┌─────────────────┐
+                │    User Query   │
+                └────────┬────────┘
+                         │
+                         ▼
+                ┌─────────────────┐
+                │    Agent        │
+                │   agent.py      │
+                └────────┬────────┘
+                         │
+                         ▼
+                ┌─────────────────┐
+                │      LLM        │
+                │     llm.py      │
+                └────────┬────────┘
+                         │
+                  Tool Selection
+                         │
+          ┌──────────────┼──────────────┐
+          ▼              ▼              ▼
+   ┌────────────┐ ┌─────────────┐ ┌────────────┐
+   │ Calculator │ │ Country API │ │ Read File  │
+   └─────┬──────┘ └──────┬──────┘ └─────┬──────┘
+         │               │              │
+         └───────────────┼──────────────┘
+                         │
+                         ▼
+                ┌─────────────────┐
+                │   Tool Result   │
+                └────────┬────────┘
+                         │
+                         ▼
+                ┌─────────────────┐
+                │      LLM        │
+                └────────┬────────┘
+                         │
+                         ▼
+                ┌─────────────────┐
+                │  Final Answer   │
+                └─────────────────┘
+```
 
-**llm\_calls**
+---
 
-**```**
+## 🧪 Testing
 
+The individual tools can be tested independently before running the complete agent.
 
+For example, test the calculator:
 
-**Each agent reads relevant information from the shared state and returns new information for the next stage of the workflow.**
+```bash
+python tools/calculator.py
+```
 
+Test the country API:
 
+```bash
+python tools/country_api.py
+```
 
-**This makes the application easier to extend with additional agents or tools in the future.**
+Test the file reader:
 
+```bash
+python tools/read_file.py
+```
 
+The complete system can then be tested through:
 
-**---**
+```bash
+python agent.py
+```
 
+---
 
+## 🌐 API Used
 
-**## 🐘 PostgreSQL Persistence**
+The country information tool uses:
 
+**Countries.dev**
 
+The API is used to retrieve country-related information dynamically rather than maintaining a static country database inside the project.
 
-**PostgreSQL is used with LangGraph's PostgreSQL checkpointer to provide persistent workflow state.**
+---
 
+## 📌 Key Concepts Demonstrated
 
+This project demonstrates several important concepts used in modern AI-agent systems:
 
-**This allows the application to maintain state across executions when PostgreSQL is available.**
+* Large Language Models (LLMs)
+* Tool Calling
+* Function Calling
+* Agent Loops
+* Prompt Engineering
+* API Integration
+* Structured Tool Inputs
+* Tool Execution
+* Error Handling
+* Iterative Reasoning
+* Secure File Access
+* Environment Variables
+* JSON Logging
+* Modular Python Architecture
 
+---
 
+## 🚀 Future Improvements
 
-**The application also includes an \*\*in-memory fallback\*\*, allowing the application to continue operating when PostgreSQL is unavailable.**
+The project can be extended with additional capabilities such as:
 
+* More tools
+* Database querying
+* Web search
+* Email automation
+* Weather information
+* Calendar integration
+* Authentication
+* Streaming responses
+* Better tool validation
+* Persistent conversation memory
+* Agent evaluation framework
+* Web-based user interface
+* Docker deployment
 
+---
 
-**PostgreSQL is therefore used for \*\*workflow/checkpoint persistence\*\*, rather than as the database for flight or hotel data.**
+## 🎯 Project Objective
 
+The main objective of this project is to demonstrate how an AI system can move beyond simply generating text and instead **interact with external tools to perform real tasks**.
 
+The project provides a basic but extensible foundation for building more advanced AI agents.
 
-**---**
+---
 
+## 👨‍💻 Author
 
+**Soham Bagdane**
 
-**## 🛠️ Tech Stack**
+B.Tech – Artificial Intelligence & Data Science
 
+GitHub:
+https://github.com/sohambagdane
 
+---
 
-**| Category | Technology |**
+## 📄 License
 
-**|---|---|**
-
-**| Programming Language | Python 3.12 |**
-
-**| Agent Orchestration | LangGraph |**
-
-**| LLM | Groq / LLaMA 3.3 70B |**
-
-**| Flight Data | AviationStack |**
-
-**| Web Research | Tavily |**
-
-**| Persistence | PostgreSQL |**
-
-**| Frontend | Streamlit |**
-
-**| Environment Management | python-dotenv |**
-
-**| HTTP Requests | Requests |**
-
-**| Database Driver | Psycopg |**
-
-
-
-**---**
-
-
-
-**## 📁 Project Structure**
-
-
-
-**```text**
-
-**travel-agent-using-langgraph/**
-
-**│**
-
-**├── tools/**
-
-**│   ├── \_\_init\_\_.py**
-
-**│   ├── flight\_tool.py**
-
-**│   └── tavily\_tool.py**
-
-**│**
-
-**├── travel\_plans/**
-
-**│   └── .gitkeep**
-
-**│**
-
-**├── .env.example**
-
-**├── .gitignore**
-
-**├── frontend.py**
-
-**├── main.py**
-
-**├── README.md**
-
-**└── requirements.txt**
-
-**```**
-
-
-
-**### Important Files**
-
-
-
-**\*\*`main.py`\*\***
-
-
-
-**Contains the LangGraph workflow, agent definitions, shared state, LLM integration, and PostgreSQL checkpoint configuration.**
-
-
-
-**\*\*`frontend.py`\*\***
-
-
-
-**Contains the Streamlit interface and displays the agent pipeline and final travel plan.**
-
-
-
-**\*\*`tools/flight\_tool.py`\*\***
-
-
-
-**Handles flight research through AviationStack.**
-
-
-
-**\*\*`tools/tavily\_tool.py`\*\***
-
-
-
-**Handles web research through Tavily.**
-
-
-
-**\*\*`travel\_plans/`\*\***
-
-
-
-**Stores generated Markdown travel plans locally.**
-
-
-
-**---**
-
-
-
-**# ⚙️ Local Setup**
-
-
-
-**## 1. Clone the Repository**
-
-
-
-**```bash**
-
-**git clone https://github.com/sohambagdane/travel-agent-using-langgraph.git**
-
-**cd travel-agent-using-langgraph**
-
-**```**
-
-
-
-**## 2. Create a Virtual Environment**
-
-
-
-**```bash**
-
-**python -m venv langgraph\_env3**
-
-**```**
-
-
-
-**### Windows PowerShell**
-
-
-
-**```powershell**
-
-**.\\langgraph\_env3\\Scripts\\Activate.ps1**
-
-**```**
-
-
-
-**## 3. Install Dependencies**
-
-
-
-**```bash**
-
-**pip install -r requirements.txt**
-
-**```**
-
-
-
-**---**
-
-
-
-**## 4. Configure Environment Variables**
-
-
-
-**Create a `.env` file in the project root.**
-
-
-
-**You can use `.env.example` as a template.**
-
-
-
-**```env**
-
-**GROQ\_API\_KEY=your\_groq\_api\_key**
-
-**TAVILY\_API\_KEY=your\_tavily\_api\_key**
-
-**AVIATIONSTACK\_API\_KEY=your\_aviationstack\_api\_key**
-
-**DATABASE\_URL=postgresql://postgres:your\_password@localhost:5432/langgraph\_memory\_demo**
-
-**```**
-
-
-
-**### Security**
-
-
-
-**\*\*Never commit your `.env` file or API keys to GitHub.\*\***
-
-
-
-**The repository includes `.gitignore` configuration to keep local secrets and virtual environments out of version control.**
-
-
-
-**---**
-
-
-
-**# 🐘 PostgreSQL Setup**
-
-
-
-**Create a PostgreSQL database named:**
-
-
-
-**```text**
-
-**langgraph\_memory\_demo**
-
-**```**
-
-
-
-**The default connection string is:**
-
-
-
-**```text**
-
-**postgresql://postgres:your\_password@localhost:5432/langgraph\_memory\_demo**
-
-**```**
-
-
-
-**If your PostgreSQL installation uses a different username, password, host, port, or database name, update `DATABASE\_URL` accordingly.**
-
-
-
-**The application automatically initializes the LangGraph PostgreSQL checkpointer when a valid PostgreSQL connection is available.**
-
-
-
-**---**
-
-
-
-**# ▶️ Running the Application**
-
-
-
-**## Terminal Mode**
-
-
-
-**Run:**
-
-
-
-**```bash**
-
-**python main.py**
-
-**```**
-
-
-
-**You will be prompted to enter a travel request.**
-
-
-
-**Example:**
-
-
-
-**```text**
-
-**Plan a 5-day Paris trip from Mumbai under ₹1.5 lakh.**
-
-**```**
-
-
-
-**---**
-
-
-
-**## 🌐 Streamlit Web Interface**
-
-
-
-**Run:**
-
-
-
-**```bash**
-
-**streamlit run frontend.py**
-
-**```**
-
-
-
-**Streamlit will provide a local URL, normally:**
-
-
-
-**```text**
-
-**http://localhost:8501**
-
-**```**
-
-
-
-**Open the URL in your browser to use the graphical interface.**
-
-
-
-**---**
-
-
-
-**# 💬 Example Prompts**
-
-
-
-**### Example 1**
-
-
-
-**```text**
-
-**Plan a 7-day Japan trip from Mumbai under ₹2 lakhs including flights, hotels and sightseeing.**
-
-**```**
-
-
-
-**### Example 2**
-
-
-
-**```text**
-
-**Plan a 5-day Paris trip from Mumbai under ₹1.5 lakhs.**
-
-**```**
-
-
-
-**### Example 3**
-
-
-
-**```text**
-
-**Plan a weekend trip to Dubai with accommodation and sightseeing recommendations.**
-
-**```**
-
-
-
-**---**
-
-
-
-**# 📊 Example Workflow Output**
-
-
-
-**A typical request produces information from multiple stages:**
-
-
-
-**```text**
-
-**Flight Agent**
-
-&#x20;   **↓**
-
-**Flight research**
-
-
-
-**Hotel Agent**
-
-&#x20;   **↓**
-
-**Accommodation research**
-
-
-
-**Itinerary Agent**
-
-&#x20;   **↓**
-
-**Day-by-day itinerary**
-
-
-
-**Final Agent**
-
-&#x20;   **↓**
-
-**Consolidated travel plan**
-
-**```**
-
-
-
-**The final plan can be saved as a Markdown file inside:**
-
-
-
-**```text**
-
-**travel\_plans/**
-
-**```**
-
-
-
-**---**
-
-
-
-**# ⚠️ Data and API Limitations**
-
-
-
-**This project is intended as an AI travel-planning demonstration.**
-
-
-
-**- Flight information depends on the AviationStack API and its available data.**
-
-**- Web research depends on Tavily search results.**
-
-**- Prices and availability should be independently verified before booking.**
-
-**- AI-generated recommendations may require human verification.**
-
-**- API availability and rate limits depend on the respective services.**
-
-**- The application does not guarantee real-time booking availability or final travel prices.**
-
-
-
-**Always verify flight schedules, accommodation availability, visa requirements, and travel regulations before making a booking.**
-
-
-
-**---**
-
-
-
-**# 🔐 Environment Variables**
-
-
-
-**| Variable | Purpose |**
-
-**|---|---|**
-
-**| `GROQ\_API\_KEY` | Access to the Groq LLM |**
-
-**| `TAVILY\_API\_KEY` | Web research |**
-
-**| `AVIATIONSTACK\_API\_KEY` | Flight information |**
-
-**| `DATABASE\_URL` | PostgreSQL connection |**
-
-
-
-**---**
-
-
-
-**# 🎯 Project Goals**
-
-
-
-**This project demonstrates how multiple AI agents and external tools can be combined into a structured workflow.**
-
-
-
-**The main concepts demonstrated include:**
-
-
-
-**- Multi-agent AI systems**
-
-**- LangGraph state management**
-
-**- LLM-based reasoning**
-
-**- Tool/API integration**
-
-**- Web research**
-
-**- Persistent workflow state**
-
-**- PostgreSQL checkpointing**
-
-**- Streamlit application development**
-
-**- Modular Python architecture**
-
-
-
-**---**
-
-
-
-**# 🔮 Future Improvements**
-
-
-
-**Potential future enhancements include:**
-
-
-
-**- Real-time flight price comparison**
-
-**- More precise date and route extraction**
-
-**- Additional hotel APIs**
-
-**- Budget optimization**
-
-**- Weather integration**
-
-**- Currency conversion**
-
-**- Visa requirement research**
-
-**- Map integration**
-
-**- Parallel agent execution**
-
-**- More specialized travel agents**
-
-**- User preference memory**
-
-**- Deployment to a cloud platform**
-
-
-
-**---**
-
-
-
-**# 👤 Author**
-
-
-
-**\*\*Soham Bagdane\*\***
-
-
-
-**B.Tech — Artificial Intelligence \& Data Science**
-
-
-
-**Interested in:**
-
-
-
-**- Artificial Intelligence**
-
-**- Machine Learning**
-
-**- Generative AI**
-
-**- Multi-Agent Systems**
-
-**- Data Science**
-
-**- Software Development**
-
-
-
-**---**
-
-
-
-**## ⭐ Project**
-
-
-
-**If you find this project useful or interesting, consider giving the repository a star.**
-
-
-
-**\*\*GitHub:\*\***  
-
-**https://github.com/sohambagdane/travel-agent-using-langgraph**
-
+This project is intended for educational and demonstration purposes.

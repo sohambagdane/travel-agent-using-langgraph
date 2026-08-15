@@ -135,7 +135,8 @@ def _extract_route(query: str):
 
     Examples:
 
-        5-day Japan trip from Mumbai under ₹2L
+        5-day Japan trip under ₹2L from Mumbai
+        5-day Japan trip from Mumbai
         Mumbai to Tokyo trip
         5-day Paris trip from Delhi
         Dubai weekend trip from Mumbai
@@ -172,7 +173,7 @@ def _extract_route(query: str):
                 break
 
     # ---------------------------------------------------------
-    # 2. Look for explicit "Mumbai to Tokyo"
+    # 2. Look for explicit "from Mumbai to Tokyo"
     # ---------------------------------------------------------
 
     to_match = re.search(
@@ -241,7 +242,7 @@ def _extract_flight_date(query: str) -> str | None:
     """
     Extract a requested departure date.
 
-    Supports natural language such as:
+    Supports:
 
         tomorrow
         today
@@ -326,7 +327,12 @@ def _search_api(params: dict):
     data = response.json()
 
     if data.get("error"):
-        return []
+        error_data = data.get("error", {})
+
+        raise requests.HTTPError(
+            str(error_data),
+            response=response,
+        )
 
     return data.get(
         "data",
@@ -335,13 +341,52 @@ def _search_api(params: dict):
 
 
 # ---------------------------------------------------------------------------
+# Date filtering helper
+# ---------------------------------------------------------------------------
+
+def _filter_by_departure_date(
+    flights: list,
+    requested_date: str,
+) -> list:
+    """
+    Keep only flights whose scheduled/estimated departure
+    matches the requested date.
+    """
+
+    filtered = []
+
+    for flight in flights:
+
+        departure = flight.get(
+            "departure",
+            {},
+        ) or {}
+
+        scheduled = (
+            departure.get("scheduled")
+            or departure.get("estimated")
+            or ""
+        )
+
+        if scheduled.startswith(requested_date):
+            filtered.append(flight)
+
+    return filtered
+
+
+# ---------------------------------------------------------------------------
 # Main Flight Search
 # ---------------------------------------------------------------------------
 
 def search_flights(query: str) -> str:
     """
-    Search AviationStack using the route and optional departure date
-    extracted from the request.
+    Search AviationStack using route and optional departure date.
+
+    For date-specific searches, the function first attempts an
+    exact AviationStack date query. If the current AviationStack
+    plan rejects that request with HTTP 403, the function retries
+    without the flight_date parameter and filters the returned
+    records locally.
     """
 
     if not API_KEY:
@@ -358,7 +403,7 @@ def search_flights(query: str) -> str:
     ) = _extract_route(query)
 
     # ---------------------------------------------------------
-    # We need at least a destination to perform a useful search.
+    # We need at least a destination.
     # ---------------------------------------------------------
 
     if not destination_codes:
@@ -391,40 +436,142 @@ def search_flights(query: str) -> str:
             "limit": 10,
         }
 
+        # IMPORTANT:
+        # If an origin was detected, always restrict the API
+        # request to that departure airport.
         if origin_codes:
             params["dep_iata"] = origin_codes[0]
 
-        # IMPORTANT:
-        # If the user explicitly asks for tomorrow/today/a date,
-        # restrict AviationStack to that exact departure date.
+        # -----------------------------------------------------
+        # First attempt:
+        # Exact requested date.
+        # -----------------------------------------------------
+
         if flight_date:
-            params["flight_date"] = flight_date
 
-        try:
-            flights = _search_api(params)
+            date_params = dict(params)
+            date_params["flight_date"] = flight_date
 
-            all_flights.extend(flights)
+            try:
 
-        except requests.HTTPError as exc:
+                flights = _search_api(
+                    date_params
+                )
 
-            status = (
-                exc.response.status_code
-                if exc.response is not None
-                else "unknown"
-            )
+                all_flights.extend(
+                    flights
+                )
 
-            return (
-                f"Flight search unavailable (HTTP {status}). "
-                "Check AVIATIONSTACK_API_KEY."
-            )
+                continue
 
-        except requests.RequestException as exc:
+            except requests.HTTPError as exc:
 
-            return (
-                "Flight search temporarily unavailable "
-                "due to a network error.\n"
-                f"Details: {exc}"
-            )
+                status = (
+                    exc.response.status_code
+                    if exc.response is not None
+                    else None
+                )
+
+                # -------------------------------------------------
+                # AviationStack Free plan may reject future-date
+                # queries with HTTP 403.
+                #
+                # Retry without flight_date.
+                # -------------------------------------------------
+
+                if status == 403:
+
+                    try:
+
+                        flights = _search_api(
+                            params
+                        )
+
+                        # Filter the returned live/scheduled
+                        # records locally.
+                        flights = _filter_by_departure_date(
+                            flights,
+                            flight_date,
+                        )
+
+                        all_flights.extend(
+                            flights
+                        )
+
+                        continue
+
+                    except requests.HTTPError as retry_exc:
+
+                        retry_status = (
+                            retry_exc.response.status_code
+                            if retry_exc.response is not None
+                            else "unknown"
+                        )
+
+                        return (
+                            "Flight search is unavailable for "
+                            f"the requested date ({flight_date}).\n\n"
+                            f"AviationStack returned HTTP "
+                            f"{retry_status}.\n\n"
+                            "The current AviationStack plan may "
+                            "not provide future-date flight search."
+                        )
+
+                    except requests.RequestException:
+
+                        return (
+                            "Flight search temporarily unavailable "
+                            "while checking the requested date."
+                        )
+
+                return (
+                    f"Flight search unavailable (HTTP {status}).\n"
+                    "Please check the AviationStack API configuration."
+                )
+
+            except requests.RequestException:
+
+                return (
+                    "Flight search temporarily unavailable "
+                    "due to a network error."
+                )
+
+        # -----------------------------------------------------
+        # Normal search without a requested date.
+        # -----------------------------------------------------
+
+        else:
+
+            try:
+
+                flights = _search_api(
+                    params
+                )
+
+                all_flights.extend(
+                    flights
+                )
+
+            except requests.HTTPError as exc:
+
+                status = (
+                    exc.response.status_code
+                    if exc.response is not None
+                    else "unknown"
+                )
+
+                return (
+                    f"Flight search unavailable (HTTP {status}).\n"
+                    "Please check the AviationStack API configuration."
+                )
+
+            except requests.RequestException as exc:
+
+                return (
+                    "Flight search temporarily unavailable "
+                    "due to a network error.\n"
+                    f"Details: {exc}"
+                )
 
     # ---------------------------------------------------------
     # Remove duplicate flights.
@@ -436,12 +583,17 @@ def search_flights(query: str) -> str:
     for flight in all_flights:
 
         flight_id = (
-            flight.get("flight", {}).get("iata")
-            or flight.get("flight", {}).get("number")
+            flight.get(
+                "flight",
+                {},
+            ).get("iata")
+            or flight.get(
+                "flight",
+                {},
+            ).get("number")
             or str(flight)
         )
 
-        # Include departure date in duplicate detection.
         departure = flight.get(
             "departure",
             {},
@@ -453,37 +605,24 @@ def search_flights(query: str) -> str:
         )
 
         if unique_id not in seen:
+
             seen.add(unique_id)
-            unique_flights.append(flight)
+            unique_flights.append(
+                flight
+            )
 
     # ---------------------------------------------------------
-    # IMPORTANT:
-    # If a specific date was requested, make absolutely sure
-    # we don't display flights from another date.
+    # Safety filter for specific date.
     # ---------------------------------------------------------
 
     if flight_date:
 
-        filtered_flights = []
+        unique_flights = _filter_by_departure_date(
+            unique_flights,
+            flight_date,
+        )
 
-        for flight in unique_flights:
-
-            departure = flight.get(
-                "departure",
-                {},
-            ) or {}
-
-            scheduled = (
-                departure.get("scheduled")
-                or departure.get("estimated")
-                or ""
-            )
-
-            if scheduled.startswith(flight_date):
-                filtered_flights.append(flight)
-
-        unique_flights = filtered_flights
-
+    # Maximum results.
     unique_flights = unique_flights[:10]
 
     # ---------------------------------------------------------
@@ -495,20 +634,23 @@ def search_flights(query: str) -> str:
         route_text = ""
 
         if origin_name and destination_name:
+
             route_text = (
                 f"{origin_name.title()} → "
                 f"{destination_name.title()}"
             )
 
         elif destination_name:
+
             route_text = destination_name.title()
 
         if flight_date:
+
             return (
-                f"No flight records were returned for "
+                f"No flight records were found for "
                 f"{route_text} on {flight_date}.\n\n"
-                "AviationStack may not have flight data for "
-                "that future date or route."
+                "AviationStack's available data may not contain "
+                "a matching flight for that date and route."
             )
 
         return (
@@ -540,6 +682,7 @@ def search_flights(query: str) -> str:
         )
 
     if flight_date:
+
         output.append(
             f"Departure date searched: {flight_date}"
         )
